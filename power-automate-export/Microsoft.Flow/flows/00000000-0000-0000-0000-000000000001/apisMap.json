@@ -1,0 +1,13 @@
+{
+  "office365": {
+    "Source": "Embedded",
+    "Type": "Microsoft.Flow/connections",
+    "ConnectionReferences": {
+      "office365": {
+        "Source": "Embedded",
+        "Id": "/providers/Microsoft.PowerApps/apis/shared_office365",
+        "Tier": "Standard"
+      }
+    }
+  }
+}

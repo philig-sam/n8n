@@ -1,0 +1,1062 @@
+{
+  "name": "Send Tech Newsletter",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "// Some topics from the Notion gets mapped to the same topic in the Newsletter\n// Example: AI and Agents get mapped to \"Artificial Intelligence\"\nconst topicMap = {\n  \"AI\": \"🤖 Artificial Intelligence\",\n  \"Fancy Technology\": \"🤩 Fancy Technology\",\n  \"Software Development\": \"💻 Software Development\",  \n  \"Cloud & SaaS\": \"☁️ Cloud & SaaS\",\n  \"Business\": \"🚀 Business\",\n  \"Modern Work\": \"💼 Modern Work\",  \n  \"Career\": \"📈 Career\",\n  \"Research\": \"👩‍🔬 Research\",  \n  \"Security\": \"🔐 Security\",\n  \"Other\": \"📰 Other\",\n  \"Recommendations\": \"⭐ Recommendations\",\n};\n\n// Group the news by the topics they get mapped to\nconst grouped = {};\n\nfor (const item of $('Get all Tech News of Issue').all()) {\n  // Find the right category\n  const category = topicMap[item.json.property_newsletter_category] || \"📰 Other\";\n\n  // Create the category, if it doesn't exist\n  if (!grouped[category]) {\n    grouped[category] = { title: category, articles: [] };\n  }\n\n  // Add the article to the category\n  let article = {\n    description: item.json.property_summary,\n    title: item.json.property_name,\n    url: item.json.property_url || item.json.url,\n    comment: item.json.property_editor_comment ? {} : null\n  }\n\n  if (item.json.property_editor_comment) {\n    article.comment = {\n      author: \"Robin-Manuel Thiel\",\n      content: item.json.property_editor_comment\n    }\n  }\n  \n  grouped[category].articles.push(article);\n}\n\n// Enforce the order from topicMap\nconst orderedResult = [];\nconst uniqueCategories = [...new Set(Object.values(topicMap))];\n\nfor (const cat of uniqueCategories) {\n  if (grouped[cat]) {\n    orderedResult.push(grouped[cat]);\n  }\n}\n\nconst content = {\n  \"issue_title\": $('Notion Webhook').first().json.body.data.properties.Name.title[0].plain_text,\n  \"issue_date\": $now.toFormat(\"MMMM dd, yyyy\"),\n  \"issue_number\": $('Notion Webhook').first().json.body.data.properties.Number.number,\n  \"issue_range\": $now.minus({days: 7}).toFormat(\"MMM dd, yyyy\") + \" - \" + $now.toFormat(\"MMM dd, yyyy\"),\n  \"welcome\": $('Notion Webhook').first().json.body.data.properties.Welcome.rich_text[0].plain_text,\n  \"fast_five\": $input.all().filter(x => x.json.property_top_news).map(x => ({\n    title: x.json.name,\n    url: x.json.property_url || x.json.url\n  })).slice(0, 5),\n  \"categories\": Object.values(orderedResult),\n  \"media_recommendation\": $('Set Media Recommendation').first().json.media_recommendation\n}\n\nreturn [content]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -800
+      ],
+      "id": "7366c682-7029-4c4b-9b1e-2babfd15c971",
+      "name": "Create Template Data",
+      "executeOnce": false
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "robinmanuelthiel",
+          "mode": "list",
+          "cachedResultName": "robinmanuelthiel",
+          "cachedResultUrl": "https://github.com/robinmanuelthiel"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "whatdidimiss",
+          "mode": "list",
+          "cachedResultName": "whatdidimiss",
+          "cachedResultUrl": "https://github.com/robinmanuelthiel/whatdidimiss"
+        },
+        "filePath": "=issues/{{ $now.toFormat(\"yyyy-MM-dd\") }}_issue-{{ $('Create Template Data').item.json.issue_number }}.html",
+        "fileContent": "={{ $('Generate final HTMLs').item.json.htmlWebsite }}",
+        "commitMessage": "=Publish issue {{ $('Create Template Data').item.json.issue_number }} from {{ $('Create Template Data').item.json.issue_date }}"
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        2272,
+        -896
+      ],
+      "id": "b25390f2-7c75-4654-ba67-756f07141265",
+      "name": "Upload issue as HTML",
+      "webhookId": "fcfb99a4-5406-4329-9b75-af80442ffdda",
+      "credentials": {
+        "githubApi": {
+          "id": "6tLkpn0dc8qC8wsS",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.mailjet.com/v3/REST/campaigndraft",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailjetEmailApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Locale",
+              "value": "en_US"
+            },
+            {
+              "name": "SenderName",
+              "value": "WHAT DID I MISS? | Newsletter"
+            },
+            {
+              "name": "SenderEmail",
+              "value": "newsletter@mail.whatdidimiss.io"
+            },
+            {
+              "name": "Subject",
+              "value": "={{ $('Create Template Data').item.json.issue_title }} | WDIM #{{ $('Create Template Data').item.json.issue_number }}"
+            },
+            {
+              "name": "ContactsListID",
+              "value": "10507264"
+            },
+            {
+              "name": "Title",
+              "value": "=WDIM #{{ $('Create Template Data').item.json.issue_number }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1152,
+        -800
+      ],
+      "id": "5e9eaba4-7340-4fe8-bf6a-0501b4e8cc5b",
+      "name": "Create Campaign Draft",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "QZR71n0JEtJbcC9J",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.mailjet.com/v3/REST/campaigndraft/{{ $json.Data[0].ID }}/detailcontent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailjetEmailApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Html-part",
+              "value": "={{ $('Generate final HTMLs').item.json.htmlMailjet }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1376,
+        -800
+      ],
+      "id": "9cf7e854-5f88-4109-8eab-9839ef6c7017",
+      "name": "Add Content to Campaign",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "QZR71n0JEtJbcC9J",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.mailjet.com/v3/REST/campaigndraft/{{ $('Create Campaign Draft').item.json.Data[0].ID }}/test",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailjetEmailApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"Recipients\": [\n    {\n      \"Email\":\"robin-manuel@thiel1.de\",\n      \"Name\":\"Robin-Manuel Thiel\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        -800
+      ],
+      "id": "7fd21a69-c083-4f9f-9df5-487b1a842cbf",
+      "name": "Test Campaign",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "QZR71n0JEtJbcC9J",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.mailjet.com/v3/REST/campaigndraft/{{ $('Create Campaign Draft').item.json.Data[0].ID }}/send",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailjetEmailApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2272,
+        -704
+      ],
+      "id": "398410cc-d68e-43a8-9398-d22899783056",
+      "name": "Send Campaign",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "QZR71n0JEtJbcC9J",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "13f2bf26-5195-40ff-8d62-1bf72988e142",
+              "name": "template",
+              "value": "={{ $json.content.base64Decode() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        704,
+        -800
+      ],
+      "id": "6cc799d2-f7cc-4523-a257-d63e4a8646a8",
+      "name": "Base64 Decode"
+    },
+    {
+      "parameters": {
+        "jsCode": "const Mustache = require(\"mustache\");\n\nconst template = $('Base64 Decode').first().json.template;\nconst data = $('Create Template Data').first().json;\n\nconst htmlWebsite = Mustache.render(template, data);\n\nconst htmlMailjet = Mustache.render(template, { ...data, mailjet: true });\n\nreturn { htmlWebsite, htmlMailjet };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -800
+      ],
+      "id": "7552767e-8a64-4530-99b5-be27260e76d7",
+      "name": "Generate final HTMLs"
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "operation": "get",
+        "owner": {
+          "__rl": true,
+          "value": "robinmanuelthiel",
+          "mode": "list",
+          "cachedResultName": "robinmanuelthiel",
+          "cachedResultUrl": "https://github.com/robinmanuelthiel"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "whatdidimiss",
+          "mode": "list",
+          "cachedResultName": "whatdidimiss",
+          "cachedResultUrl": "https://github.com/robinmanuelthiel/whatdidimiss"
+        },
+        "filePath": "templates/template.html",
+        "asBinaryProperty": false,
+        "additionalParameters": {}
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        -800
+      ],
+      "id": "cb704f51-7d96-4aa6-92a1-f81ea9840326",
+      "name": "Get Template",
+      "webhookId": "d274ae78-9187-4d39-89ab-d507394be79e",
+      "executeOnce": false,
+      "credentials": {
+        "githubApi": {
+          "id": "6tLkpn0dc8qC8wsS",
+          "name": "GitHub account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ecdff37b-f164-4576-a3ba-40fc98a98e19",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1312,
+        -800
+      ],
+      "id": "6fb5ed1f-1584-4d7e-ae28-c20adfd693d1",
+      "name": "Notion Webhook",
+      "webhookId": "ecdff37b-f164-4576-a3ba-40fc98a98e19"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "toRecipients": "robin-manuel@thiel1.de",
+        "subject": "Approve Newsletter?",
+        "message": "=Do you want to approve WDIM #{{ $('Create Template Data').item.json.issue_number }}?",
+        "approvalOptions": {
+          "values": {
+            "approvalType": "double"
+          }
+        },
+        "options": {
+          "appendAttribution": true
+        }
+      },
+      "type": "n8n-nodes-base.microsoftOutlook",
+      "typeVersion": 2,
+      "position": [
+        1824,
+        -704
+      ],
+      "id": "f79a2fbf-ff44-405e-928f-bac306ae2599",
+      "name": "Get Approval",
+      "webhookId": "dcfed76b-6255-4e63-8eb5-7fc5dffeee75",
+      "credentials": {
+        "microsoftOutlookOAuth2Api": {
+          "id": "1mOSzF879XL0xvwF",
+          "name": "Microsoft Outlook account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "92ed4296-ad70-40b0-bb8e-fc07d6df21dd",
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2048,
+        -704
+      ],
+      "id": "40dd2134-b564-4af5-b191-80b014ad290d",
+      "name": "If Approved"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://api.mailjet.com/v3/REST/campaigndraft/{{ $('Create Campaign Draft').item.json.Data[0].ID }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "mailjetEmailApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "Status",
+              "value": "-1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2272,
+        -512
+      ],
+      "id": "78cc6f0c-7b1a-457a-acd9-3cca2bec65c2",
+      "name": "Archive Campaign Draft",
+      "credentials": {
+        "mailjetEmailApi": {
+          "id": "QZR71n0JEtJbcC9J",
+          "name": "Mailjet Email account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "260a7fbd-751a-80fc-8cfb-eae50adeb1d7",
+          "mode": "list",
+          "cachedResultName": "Tech News",
+          "cachedResultUrl": "https://www.notion.so/260a7fbd751a80fc8cfbeae50adeb1d7"
+        },
+        "returnAll": true,
+        "filterType": "manual",
+        "matchType": "allFilters",
+        "filters": {
+          "conditions": [
+            {
+              "key": "WDIM Issue|relation",
+              "condition": "contains",
+              "relationValue": "={{ $('Notion Webhook').item.json.body.data.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        -192,
+        -800
+      ],
+      "id": "9f23bd4d-ab02-4c55-b403-69ecdacbfa31",
+      "name": "Get all Tech News of Issue",
+      "executeOnce": false,
+      "retryOnFail": false,
+      "notesInFlow": false,
+      "alwaysOutputData": false,
+      "credentials": {
+        "notionApi": {
+          "id": "fmYYqPODyqwozQhl",
+          "name": "Notion account"
+        }
+      },
+      "notes": "We run this step again, as there could have already been news manually assigned before, and we want to feed all news from an issue to the template."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const url = require('node:url');\n\ntry {\n  const fullUrl = new url.URL($input.item.json.property_url);\n  fullUrl.searchParams.delete(\"utm_source\");\n  fullUrl.searchParams.delete(\"utm_medium\");\n  fullUrl.searchParams.delete(\"utm_campaign\");\n  fullUrl.searchParams.delete(\"utm_content\");\n  fullUrl.searchParams.delete(\"utm_term\");\n  fullUrl.searchParams.delete(\"_bhlid\");\n  $input.item.json.property_url = fullUrl.toString();\n} catch (error) {\n  // If URL parsing fails, return the original input unchanged \n} finally {\n  return $input.item;\n}\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        32,
+        -800
+      ],
+      "id": "c207cddd-b32a-48de-a4d7-0f0c0fc1b365",
+      "name": "Clean URLs",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $('Notion Webhook').first().json.body.data.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|status",
+              "statusValue": "Sent"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        2496,
+        -704
+      ],
+      "id": "8b60c705-b084-4876-86d1-b21c84b544dd",
+      "name": "Set status to sent",
+      "credentials": {
+        "notionApi": {
+          "id": "fmYYqPODyqwozQhl",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $('Notion Webhook').first().json.body.data.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status|status",
+              "statusValue": "Waiting for approval"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [
+        1824,
+        -896
+      ],
+      "id": "0b70df6a-bfe1-478c-b39c-fcbb56680385",
+      "name": "Set status to waiting",
+      "credentials": {
+        "notionApi": {
+          "id": "fmYYqPODyqwozQhl",
+          "name": "Notion account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        -704
+      ],
+      "id": "7fcc41e3-fac4-4584-8af7-435c3687a6c1",
+      "name": "No Operation, do nothing"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.data.properties['Media Recommendation'].url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -864,
+        -896
+      ],
+      "id": "893c66d9-9fda-4e44-b9c7-43f7b3e8532c",
+      "name": "Get Media Recommendation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "ea99b040-c693-4a06-aec0-730ab7abe8a9",
+              "leftValue": "={{ $json.body.data.properties['Media Recommendation'].url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -1088,
+        -800
+      ],
+      "id": "854e5aaf-7dc1-46cc-9feb-e29b6b6c4a21",
+      "name": "If Media Recommendation"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const url_import = require('node:url');\n\nconst html = $json.data;\nconst url = $('Notion Webhook').item.json.body.data.properties['Media Recommendation'].url;\nconst extraText = $('Notion Webhook').item.json.body.data.properties['Media Recommendation Text']?.rich_text[0]?.plain_text ?? null;\n\n// Parse Open Graph meta tags using regex\nconst getMetaTag = (name) => {\n  const regex = new RegExp(`<meta[^>]*(?:property|name)=[\"']og:${name}[\"'][^>]*content=[\"']([^\"']*)[\"']`, 'i');\n  const altRegex = new RegExp(`<meta[^>]*content=[\"']([^\"']*)[\"'][^>]*(?:property|name)=[\"']og:${name}[\"']`, 'i');\n\n  const match = html.match(regex) || html.match(altRegex);\n  return match ? match[1] : null;\n};\n\nconst getPageTitle = () => {\n  const match = html?.match(\n    /<head\\b[^>]*>[\\s\\S]*?<title\\b[^>]*>([\\s\\S]*?)<\\/title>[\\s\\S]*?<\\/head>/i\n  );\n  return match\n    ? match[1].replace(/\\s+/g, ' ').trim()\n    : null;\n};\n\n// Extract domain from URL\nconst domain = new url_import.URL(url).hostname;\n\n// Detect type based on URL patterns\nconst detectType = (url, ogType) => {\n  if (ogType === 'video' || url.includes('youtube.com') || url.includes('vimeo.com')) return 'Video';\n  if (url.includes('github.com')) return 'GitHub';\n  if (ogType === 'article') return 'Blog';\n  return 'Website';\n};\n\nconst ogType = getMetaTag('type');\n\nreturn {\n  json: {\n    media_recommendation: {\n      url: url,\n      title: getMetaTag('title') || getMetaTag('site_name') || getPageTitle(),\n      description: getMetaTag('description'),\n      image: getMetaTag('image'),\n      type: detectType(url, ogType),\n      domain: domain,\n      extra_text: extraText\n    }\n  }\n};\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        -896
+      ],
+      "id": "b0a10e31-4d03-4e22-a80b-572c28cc31a4",
+      "name": "Extract Open Graph metadata"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d01485a-9fa7-45fc-ac62-d8708a7d65e2",
+              "name": "=media_recommendation",
+              "value": "={{ $json.media_recommendation }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -416,
+        -800
+      ],
+      "id": "3acbbb11-8566-4bb7-b9fc-cbce82eb390e",
+      "name": "Set Media Recommendation"
+    }
+  ],
+  "pinData": {
+    "Notion Webhook": [
+      {
+        "json": {
+          "headers": {
+            "connection": "close",
+            "host": "n8n.robinmanuelthiel.synology.me",
+            "x-real-ip": "44.227.140.35",
+            "x-forwarded-for": "44.227.140.35",
+            "x-forwarded-proto": "https",
+            "content-length": "3853",
+            "user-agent": "NotionAutomation",
+            "content-type": "application/json",
+            "sentry-trace": "8f7eaa109b68484c8611c4ca538aa0b6-b62999c0a3a0544f",
+            "baggage": "sentry-environment=production,sentry-release=20260123.1548-96e5a66,sentry-public_key=529a6d1990e5471d874257842c4f4ad8,sentry-trace_id=8f7eaa109b68484c8611c4ca538aa0b6",
+            "traceparent": "00-2ac9e90a6609a95db40607f1aac512f1-683f549fd7fd1e2c-00"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "source": {
+              "type": "automation",
+              "automation_id": "28aa7fbd-751a-8087-a896-004d2ab17e47",
+              "action_id": "28aa7fbd-751a-80ee-992c-005a49bb6cda",
+              "event_id": "43d93e64-06dc-48db-96b3-3f40afb12ca0",
+              "user_id": "ed7c163a-f64b-4209-ab76-8e8fc337abb1",
+              "attempt": 1
+            },
+            "data": {
+              "object": "page",
+              "id": "2eaa7fbd-751a-80de-87ea-ce3e9683875e",
+              "created_time": "2026-01-16T16:49:00.000Z",
+              "last_edited_time": "2026-01-23T18:54:00.000Z",
+              "created_by": {
+                "object": "user",
+                "id": "ed7c163a-f64b-4209-ab76-8e8fc337abb1"
+              },
+              "last_edited_by": {
+                "object": "user",
+                "id": "ed7c163a-f64b-4209-ab76-8e8fc337abb1"
+              },
+              "cover": null,
+              "icon": null,
+              "parent": {
+                "type": "data_source_id",
+                "data_source_id": "27da7fbd-751a-8029-9415-000b8871fe64",
+                "database_id": "27da7fbd-751a-80ed-9489-e6e5a31f180b"
+              },
+              "archived": false,
+              "in_trash": false,
+              "is_locked": false,
+              "properties": {
+                "📰 Tech News": {
+                  "id": "SITl",
+                  "type": "relation",
+                  "relation": [
+                    {
+                      "id": "2eaa7fbd-751a-813f-b344-f38e5e70ea7e"
+                    },
+                    {
+                      "id": "2eaa7fbd-751a-81a6-b7d0-fffed84dbcb3"
+                    },
+                    {
+                      "id": "2eba7fbd-751a-812f-8332-d0db70d1060a"
+                    },
+                    {
+                      "id": "2eba7fbd-751a-8172-bc18-e81fe0e71703"
+                    },
+                    {
+                      "id": "2eca7fbd-751a-810a-9c5a-c01cbb899164"
+                    },
+                    {
+                      "id": "2eca7fbd-751a-8123-b954-c02d5639af84"
+                    },
+                    {
+                      "id": "2eca7fbd-751a-8169-b207-dde231e7fc58"
+                    },
+                    {
+                      "id": "2eca7fbd-751a-818b-b663-c895508d6e4a"
+                    },
+                    {
+                      "id": "2eda7fbd-751a-8113-a3d8-f56a402ae59d"
+                    },
+                    {
+                      "id": "2eda7fbd-751a-817f-a803-ea049ab6e757"
+                    },
+                    {
+                      "id": "2eda7fbd-751a-81bb-b494-e2ca8724de16"
+                    },
+                    {
+                      "id": "2eea7fbd-751a-810a-974f-ea2a7a29600d"
+                    },
+                    {
+                      "id": "2eea7fbd-751a-812b-a380-c0afa0d3e350"
+                    },
+                    {
+                      "id": "2eea7fbd-751a-8158-a8ee-c9739a8c62fe"
+                    },
+                    {
+                      "id": "2eea7fbd-751a-8193-b917-c5c9599ed779"
+                    },
+                    {
+                      "id": "2eea7fbd-751a-81fe-9eb6-e236d55693dc"
+                    },
+                    {
+                      "id": "2efa7fbd-751a-811d-8dbf-eec5710380ac"
+                    },
+                    {
+                      "id": "2efa7fbd-751a-8144-ad62-fc829924a6db"
+                    },
+                    {
+                      "id": "2f0a7fbd-751a-8180-8ba7-f7f24b2310db"
+                    },
+                    {
+                      "id": "2f0a7fbd-751a-81bc-a4e6-f9d9d9e0d240"
+                    },
+                    {
+                      "id": "2f1a7fbd-751a-815d-adb2-f404facbe4e7"
+                    }
+                  ],
+                  "has_more": false
+                },
+                "Name": {
+                  "id": "title",
+                  "type": "title",
+                  "title": [
+                    {
+                      "type": "text",
+                      "text": {
+                        "content": "ChatGPT Gets Ads, Tesla Rethinks FSD, Threads Tops X, AI Pop Star Climbs Charts",
+                        "link": null
+                      },
+                      "annotations": {
+                        "bold": false,
+                        "italic": false,
+                        "strikethrough": false,
+                        "underline": false,
+                        "code": false,
+                        "color": "default"
+                      },
+                      "plain_text": "ChatGPT Gets Ads, Tesla Rethinks FSD, Threads Tops X, AI Pop Star Climbs Charts",
+                      "href": null
+                    }
+                  ]
+                },
+                "Welcome": {
+                  "id": "Nxow",
+                  "type": "rich_text",
+                  "rich_text": [
+                    {
+                      "type": "text",
+                      "text": {
+                        "content": "OpenAI is adding ads to ChatGPT while Google insists Gemini stays ad free, Tesla is quietly reshaping how it sells FSD, and Meta’s Threads has overtaken X for the first time. Meanwhile, AI is writing hits, shopping for us with new Agentic Commerce protocols from Google, and fuelling a nuclear‑powered data‑center boom. Let’s unpack the tech news of this week!",
+                        "link": null
+                      },
+                      "annotations": {
+                        "bold": false,
+                        "italic": false,
+                        "strikethrough": false,
+                        "underline": false,
+                        "code": false,
+                        "color": "default"
+                      },
+                      "plain_text": "OpenAI is adding ads to ChatGPT while Google insists Gemini stays ad free, Tesla is quietly reshaping how it sells FSD, and Meta’s Threads has overtaken X for the first time. Meanwhile, AI is writing hits, shopping for us with new Agentic Commerce protocols from Google, and fuelling a nuclear‑powered data‑center boom. Let’s unpack the tech news of this week!",
+                      "href": null
+                    }
+                  ]
+                },
+                "Number": {
+                  "id": "IP%5B%60",
+                  "type": "number",
+                  "number": 18
+                },
+                "URL": {
+                  "id": "EL%3Bc",
+                  "type": "url",
+                  "url": null
+                },
+                "Status": {
+                  "id": "%5Ezc%3F",
+                  "type": "status",
+                  "status": {
+                    "id": "f22a3acf-6155-482e-899d-a4ae63c68ed3",
+                    "name": "Prepared",
+                    "color": "blue"
+                  }
+                },
+                "Media Recommendation": {
+                  "id": "%3B%5CVJ",
+                  "type": "url",
+                  "url": "https://andrewmccalip.com/space-datacenters"
+                },
+                "Media Recommendation Text": {
+                  "id": "%7B%7BQ~",
+                  "type": "rich_text",
+                  "rich_text": []
+                }
+              },
+              "url": "https://www.notion.so/ChatGPT-Gets-Ads-Tesla-Rethinks-FSD-Threads-Tops-X-AI-Pop-Star-Climbs-Charts-2eaa7fbd751a80de87eace3e9683875e",
+              "public_url": null,
+              "request_id": "09211233-e723-410d-ab31-55930bc141c7"
+            }
+          },
+          "webhookUrl": "https://n8n.robinmanuelthiel.synology.me/webhook/ecdff37b-f164-4576-a3ba-40fc98a98e19",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Create Template Data": {
+      "main": [
+        [
+          {
+            "node": "Get Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Campaign Draft": {
+      "main": [
+        [
+          {
+            "node": "Add Content to Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Content to Campaign": {
+      "main": [
+        [
+          {
+            "node": "Test Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test Campaign": {
+      "main": [
+        [
+          {
+            "node": "Get Approval",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set status to waiting",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base64 Decode": {
+      "main": [
+        [
+          {
+            "node": "Generate final HTMLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate final HTMLs": {
+      "main": [
+        [
+          {
+            "node": "Create Campaign Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Template": {
+      "main": [
+        [
+          {
+            "node": "Base64 Decode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notion Webhook": {
+      "main": [
+        [
+          {
+            "node": "If Media Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Approval": {
+      "main": [
+        [
+          {
+            "node": "If Approved",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Approved": {
+      "main": [
+        [
+          {
+            "node": "Send Campaign",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload issue as HTML",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Archive Campaign Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get all Tech News of Issue": {
+      "main": [
+        [
+          {
+            "node": "Clean URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean URLs": {
+      "main": [
+        [
+          {
+            "node": "Create Template Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Campaign": {
+      "main": [
+        [
+          {
+            "node": "Set status to sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Operation, do nothing": {
+      "main": [
+        [
+          {
+            "node": "Set Media Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Media Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Extract Open Graph metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Media Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Get Media Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Operation, do nothing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Open Graph metadata": {
+      "main": [
+        [
+          {
+            "node": "Set Media Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Media Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Get all Tech News of Issue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7e368cce-60f6-4dcf-9a97-cab877279c6a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "45370044e7cf18e1f072848007d0bfc3d6600cb7190e07f4473f1eb0523befcb"
+  },
+  "id": "Jo1rkbsSjiLZoUNH",
+  "tags": []
+}

@@ -1,0 +1,25 @@
+{
+  "schema": "1.0",
+  "details": {
+    "displayName": "Send Tech Newsletter (skeleton from n8n)",
+    "description": "Power Automate skeleton flow definition translated from the n8n 'Send Tech Newsletter' workflow. Contains stubs for nodes that require external code (Mustache rendering, OG metadata extraction, URL cleaning, template-data grouping) — wire these to Azure Functions or rewrite as in-flow actions before use.",
+    "createdTime": "2026-06-03T00:00:00Z",
+    "packageTelemetryId": "00000000-0000-0000-0000-000000000000",
+    "creator": "n8n-to-power-automate skeleton",
+    "sourceEnvironment": "n8n"
+  },
+  "resources": {
+    "00000000-0000-0000-0000-000000000001": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "SendTechNewsletter",
+      "type": "Microsoft.Flow/flows",
+      "creationType": "New, Update",
+      "details": {
+        "displayName": "Send Tech Newsletter (skeleton)"
+      },
+      "configurableBy": "User",
+      "hierarchy": "Root",
+      "dependsOn": []
+    }
+  }
+}

@@ -1,0 +1,415 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "$connections": {
+      "defaultValue": {},
+      "type": "Object"
+    },
+    "$authentication": {
+      "defaultValue": {},
+      "type": "SecureObject"
+    },
+    "NotionApiToken": {
+      "defaultValue": "REPLACE_WITH_NOTION_INTEGRATION_TOKEN",
+      "type": "String"
+    },
+    "NotionDataSourceId": {
+      "defaultValue": "260a7fbd-751a-80fc-8cfb-eae50adeb1d7",
+      "type": "String"
+    },
+    "MailjetApiKey": {
+      "defaultValue": "REPLACE_WITH_MAILJET_API_KEY",
+      "type": "String"
+    },
+    "MailjetApiSecret": {
+      "defaultValue": "REPLACE_WITH_MAILJET_API_SECRET",
+      "type": "String"
+    },
+    "MailjetContactsListId": {
+      "defaultValue": "10507264",
+      "type": "String"
+    },
+    "GitHubApiToken": {
+      "defaultValue": "REPLACE_WITH_GITHUB_PAT",
+      "type": "String"
+    },
+    "GitHubOwner": {
+      "defaultValue": "robinmanuelthiel",
+      "type": "String"
+    },
+    "GitHubRepo": {
+      "defaultValue": "whatdidimiss",
+      "type": "String"
+    },
+    "TemplateRendererFunctionUrl": {
+      "defaultValue": "REPLACE_WITH_AZURE_FUNCTION_URL",
+      "type": "String"
+    },
+    "OpenGraphFunctionUrl": {
+      "defaultValue": "REPLACE_WITH_AZURE_FUNCTION_URL",
+      "type": "String"
+    },
+    "CleanUrlsFunctionUrl": {
+      "defaultValue": "REPLACE_WITH_AZURE_FUNCTION_URL",
+      "type": "String"
+    },
+    "CreateTemplateDataFunctionUrl": {
+      "defaultValue": "REPLACE_WITH_AZURE_FUNCTION_URL",
+      "type": "String"
+    },
+    "ApproverEmail": {
+      "defaultValue": "robin-manuel@thiel1.de",
+      "type": "String"
+    }
+  },
+  "triggers": {
+    "Notion_Webhook": {
+      "type": "Request",
+      "kind": "Http",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "object" },
+            "data": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "properties": { "type": "object" }
+              }
+            }
+          }
+        },
+        "method": "POST"
+      }
+    }
+  },
+  "actions": {
+    "Initialize_MediaRecommendation": {
+      "runAfter": {},
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "media_recommendation",
+            "type": "object",
+            "value": {}
+          }
+        ]
+      }
+    },
+    "If_Media_Recommendation": {
+      "runAfter": { "Initialize_MediaRecommendation": [ "Succeeded" ] },
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "not": {
+              "equals": [
+                "@coalesce(triggerBody()?['data']?['properties']?['Media Recommendation']?['url'], '')",
+                ""
+              ]
+            }
+          }
+        ]
+      },
+      "actions": {
+        "Get_Media_Recommendation": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "@triggerBody()?['data']?['properties']?['Media Recommendation']?['url']"
+          }
+        },
+        "Extract_Open_Graph_metadata": {
+          "runAfter": { "Get_Media_Recommendation": [ "Succeeded" ] },
+          "type": "Http",
+          "description": "STUB: Replace with Azure Function that performs Open Graph extraction. Input: { html, url, extraText } -> Output: media_recommendation object.",
+          "inputs": {
+            "method": "POST",
+            "uri": "@parameters('OpenGraphFunctionUrl')",
+            "headers": { "Content-Type": "application/json" },
+            "body": {
+              "html": "@body('Get_Media_Recommendation')",
+              "url": "@triggerBody()?['data']?['properties']?['Media Recommendation']?['url']",
+              "extraText": "@coalesce(triggerBody()?['data']?['properties']?['Media Recommendation Text']?['rich_text']?[0]?['plain_text'], '')"
+            }
+          }
+        },
+        "Set_Media_Recommendation_From_OG": {
+          "runAfter": { "Extract_Open_Graph_metadata": [ "Succeeded" ] },
+          "type": "SetVariable",
+          "inputs": {
+            "name": "media_recommendation",
+            "value": "@body('Extract_Open_Graph_metadata')?['media_recommendation']"
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "No_Operation": {
+            "type": "Compose",
+            "inputs": "No media recommendation provided"
+          }
+        }
+      }
+    },
+    "Get_all_Tech_News_of_Issue": {
+      "runAfter": { "If_Media_Recommendation": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "Notion: Query data source for pages where WDIM Issue relation contains the triggering page id. Uses raw Notion REST API.",
+      "inputs": {
+        "method": "POST",
+        "uri": "https://api.notion.com/v1/data_sources/@{parameters('NotionDataSourceId')}/query",
+        "headers": {
+          "Authorization": "Bearer @{parameters('NotionApiToken')}",
+          "Notion-Version": "2025-09-03",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "filter": {
+            "property": "WDIM Issue",
+            "relation": { "contains": "@{triggerBody()?['data']?['id']}" }
+          },
+          "page_size": 100
+        }
+      }
+    },
+    "Clean_URLs": {
+      "runAfter": { "Get_all_Tech_News_of_Issue": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "STUB: Replace with Azure Function. Strips utm_* and _bhlid query params from property_url for every page. Input: { pages: [...] } -> Output: { pages: [...] } with cleaned property_url.",
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('CleanUrlsFunctionUrl')",
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "pages": "@body('Get_all_Tech_News_of_Issue')?['results']"
+        }
+      }
+    },
+    "Create_Template_Data": {
+      "runAfter": { "Clean_URLs": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "STUB: Replace with Azure Function that performs grouping by topic, ordering, fast-five extraction, etc. (the n8n Create Template Data node).",
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('CreateTemplateDataFunctionUrl')",
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "pages": "@body('Clean_URLs')?['pages']",
+          "issueTitle": "@triggerBody()?['data']?['properties']?['Name']?['title']?[0]?['plain_text']",
+          "issueNumber": "@triggerBody()?['data']?['properties']?['Number']?['number']",
+          "welcome": "@triggerBody()?['data']?['properties']?['Welcome']?['rich_text']?[0]?['plain_text']",
+          "now": "@utcNow()",
+          "mediaRecommendation": "@variables('media_recommendation')"
+        }
+      }
+    },
+    "Get_Template": {
+      "runAfter": { "Create_Template_Data": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "GitHub: fetch templates/template.html from repo. Returns base64 in 'content' field.",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://api.github.com/repos/@{parameters('GitHubOwner')}/@{parameters('GitHubRepo')}/contents/templates/template.html",
+        "headers": {
+          "Authorization": "Bearer @{parameters('GitHubApiToken')}",
+          "Accept": "application/vnd.github+json",
+          "User-Agent": "power-automate-wdim"
+        }
+      }
+    },
+    "Base64_Decode": {
+      "runAfter": { "Get_Template": [ "Succeeded" ] },
+      "type": "Compose",
+      "inputs": "@base64ToString(replace(body('Get_Template')?['content'], '\n', ''))"
+    },
+    "Generate_final_HTMLs": {
+      "runAfter": { "Base64_Decode": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "STUB: Replace with Azure Function that runs Mustache.render(template, data) and Mustache.render(template, { ...data, mailjet: true }). Returns { htmlWebsite, htmlMailjet }.",
+      "inputs": {
+        "method": "POST",
+        "uri": "@parameters('TemplateRendererFunctionUrl')",
+        "headers": { "Content-Type": "application/json" },
+        "body": {
+          "template": "@outputs('Base64_Decode')",
+          "data": "@body('Create_Template_Data')"
+        }
+      }
+    },
+    "Create_Campaign_Draft": {
+      "runAfter": { "Generate_final_HTMLs": [ "Succeeded" ] },
+      "type": "Http",
+      "inputs": {
+        "method": "POST",
+        "uri": "https://api.mailjet.com/v3/REST/campaigndraft",
+        "headers": {
+          "Authorization": "Basic @{base64(concat(parameters('MailjetApiKey'), ':', parameters('MailjetApiSecret')))}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Locale": "en_US",
+          "SenderName": "WHAT DID I MISS? | Newsletter",
+          "SenderEmail": "newsletter@mail.whatdidimiss.io",
+          "Subject": "@{body('Create_Template_Data')?['issue_title']} | WDIM #@{body('Create_Template_Data')?['issue_number']}",
+          "ContactsListID": "@parameters('MailjetContactsListId')",
+          "Title": "WDIM #@{body('Create_Template_Data')?['issue_number']}"
+        }
+      }
+    },
+    "Add_Content_to_Campaign": {
+      "runAfter": { "Create_Campaign_Draft": [ "Succeeded" ] },
+      "type": "Http",
+      "inputs": {
+        "method": "POST",
+        "uri": "https://api.mailjet.com/v3/REST/campaigndraft/@{body('Create_Campaign_Draft')?['Data']?[0]?['ID']}/detailcontent",
+        "headers": {
+          "Authorization": "Basic @{base64(concat(parameters('MailjetApiKey'), ':', parameters('MailjetApiSecret')))}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Html-part": "@body('Generate_final_HTMLs')?['htmlMailjet']"
+        }
+      }
+    },
+    "Test_Campaign": {
+      "runAfter": { "Add_Content_to_Campaign": [ "Succeeded" ] },
+      "type": "Http",
+      "inputs": {
+        "method": "POST",
+        "uri": "https://api.mailjet.com/v3/REST/campaigndraft/@{body('Create_Campaign_Draft')?['Data']?[0]?['ID']}/test",
+        "headers": {
+          "Authorization": "Basic @{base64(concat(parameters('MailjetApiKey'), ':', parameters('MailjetApiSecret')))}",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "Recipients": [
+            { "Email": "@parameters('ApproverEmail')", "Name": "Approver" }
+          ]
+        }
+      }
+    },
+    "Set_status_to_waiting": {
+      "runAfter": { "Test_Campaign": [ "Succeeded" ] },
+      "type": "Http",
+      "description": "Notion: PATCH page Status -> Waiting for approval. continueErrorOutput in n8n is represented here via runAfter handling on subsequent actions if needed.",
+      "inputs": {
+        "method": "PATCH",
+        "uri": "https://api.notion.com/v1/pages/@{triggerBody()?['data']?['id']}",
+        "headers": {
+          "Authorization": "Bearer @{parameters('NotionApiToken')}",
+          "Notion-Version": "2025-09-03",
+          "Content-Type": "application/json"
+        },
+        "body": {
+          "properties": {
+            "Status": { "status": { "name": "Waiting for approval" } }
+          }
+        }
+      }
+    },
+    "Get_Approval": {
+      "runAfter": { "Set_status_to_waiting": [ "Succeeded", "Failed" ] },
+      "type": "ApiConnectionWebhook",
+      "description": "STUB: Wire to Office 365 Outlook 'Send approval email' or Approvals connector. Replace with appropriate ApiConnectionWebhook config in the designer after import.",
+      "inputs": {
+        "host": {
+          "connection": { "name": "@parameters('$connections')['office365']['connectionId']" }
+        },
+        "body": {
+          "NotificationUrl": "@{listCallbackUrl()}",
+          "Message": {
+            "To": "@parameters('ApproverEmail')",
+            "Subject": "Approve Newsletter?",
+            "Options": "Approve, Reject",
+            "Body": "Do you want to approve WDIM #@{body('Create_Template_Data')?['issue_number']}?"
+          }
+        },
+        "path": "/approval/$subscriptions"
+      }
+    },
+    "If_Approved": {
+      "runAfter": { "Get_Approval": [ "Succeeded" ] },
+      "type": "If",
+      "expression": {
+        "and": [
+          {
+            "equals": [
+              "@body('Get_Approval')?['SelectedOption']",
+              "Approve"
+            ]
+          }
+        ]
+      },
+      "actions": {
+        "Send_Campaign": {
+          "type": "Http",
+          "inputs": {
+            "method": "POST",
+            "uri": "https://api.mailjet.com/v3/REST/campaigndraft/@{body('Create_Campaign_Draft')?['Data']?[0]?['ID']}/send",
+            "headers": {
+              "Authorization": "Basic @{base64(concat(parameters('MailjetApiKey'), ':', parameters('MailjetApiSecret')))}",
+              "Content-Type": "application/json"
+            },
+            "body": {}
+          }
+        },
+        "Upload_issue_as_HTML": {
+          "type": "Http",
+          "description": "GitHub: PUT contents to publish the rendered website HTML.",
+          "inputs": {
+            "method": "PUT",
+            "uri": "https://api.github.com/repos/@{parameters('GitHubOwner')}/@{parameters('GitHubRepo')}/contents/issues/@{formatDateTime(utcNow(), 'yyyy-MM-dd')}_issue-@{body('Create_Template_Data')?['issue_number']}.html",
+            "headers": {
+              "Authorization": "Bearer @{parameters('GitHubApiToken')}",
+              "Accept": "application/vnd.github+json",
+              "User-Agent": "power-automate-wdim"
+            },
+            "body": {
+              "message": "Publish issue @{body('Create_Template_Data')?['issue_number']} from @{body('Create_Template_Data')?['issue_date']}",
+              "content": "@{base64(body('Generate_final_HTMLs')?['htmlWebsite'])}"
+            }
+          }
+        },
+        "Set_status_to_sent": {
+          "runAfter": { "Send_Campaign": [ "Succeeded" ] },
+          "type": "Http",
+          "inputs": {
+            "method": "PATCH",
+            "uri": "https://api.notion.com/v1/pages/@{triggerBody()?['data']?['id']}",
+            "headers": {
+              "Authorization": "Bearer @{parameters('NotionApiToken')}",
+              "Notion-Version": "2025-09-03",
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "properties": {
+                "Status": { "status": { "name": "Sent" } }
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Archive_Campaign_Draft": {
+            "type": "Http",
+            "inputs": {
+              "method": "PUT",
+              "uri": "https://api.mailjet.com/v3/REST/campaigndraft/@{body('Create_Campaign_Draft')?['Data']?[0]?['ID']}",
+              "headers": {
+                "Authorization": "Basic @{base64(concat(parameters('MailjetApiKey'), ':', parameters('MailjetApiSecret')))}",
+                "Content-Type": "application/json"
+              },
+              "body": { "Status": "-1" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {}
+}

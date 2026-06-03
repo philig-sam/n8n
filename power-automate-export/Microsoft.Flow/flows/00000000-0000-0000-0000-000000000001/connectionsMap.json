@@ -1,0 +1,7 @@
+{
+  "office365": {
+    "Source": "Embedded",
+    "Id": "shared_office365",
+    "ConnectorName": "shared_office365"
+  }
+}
