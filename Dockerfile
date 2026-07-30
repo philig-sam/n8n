@@ -39,5 +39,6 @@ VOLUME /data
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
-# Apply migrations, then start the persistent server (which boots the scheduler)
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
+# Apply migrations and the idempotent seed, then start the persistent server
+# (which boots the in-process scheduler)
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node prisma/seed.js && node server.js"]

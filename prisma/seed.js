@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+// Idempotent seed (upserts only) - safe to run on every container boot.
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
