@@ -1,0 +1,133 @@
+// Vendor Licensing Intelligence Service
+//
+// SQLite today, Postgres later: the schema deliberately avoids Prisma `enum`
+// blocks (unsupported on SQLite) and any provider-specific column types.
+// Enumerated values are stored as String and enforced in the app layer via
+// Zod (see src/lib/domain.ts). Switching to Postgres is a datasource
+// provider/url change only.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Vendor {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  profileMarkdown String   @default("")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  sources       Source[]
+  rawItems      RawItem[]
+  events        Event[]
+  subscriptions Subscription[]
+}
+
+model Source {
+  id            String    @id @default(cuid())
+  vendorId      String
+  vendor        Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  kind          String // 'rss' | 'page'
+  url           String
+  label         String
+  active        Boolean   @default(true)
+  lastFetchedAt DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  rawItems RawItem[]
+
+  @@index([vendorId])
+}
+
+model RawItem {
+  id          String   @id @default(cuid())
+  sourceId    String
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  vendorId    String
+  vendor      Vendor   @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  url         String
+  title       String
+  contentText String
+  contentHash String
+  fetchedAt   DateTime @default(now())
+  processed   Boolean  @default(false)
+  // Set when classification failed twice and a human should look at it
+  needsReview Boolean  @default(false)
+
+  events Event[]
+
+  // The same story often appears in multiple feeds for one vendor; the hash
+  // is computed from normalized content so duplicates are skipped per vendor.
+  @@unique([vendorId, contentHash])
+  @@index([sourceId])
+  @@index([processed])
+}
+
+model Event {
+  id         String    @id @default(cuid())
+  vendorId   String
+  vendor     Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  type       String // MERGER_ACQUISITION | LICENSING_MODEL | PRICE_CHANGE | PRODUCT_EOL | LEADERSHIP_STRATEGY | PARTNER_PROGRAM | LEGAL_REGULATORY | OTHER
+  severity   String // 'high' | 'normal'
+  title      String
+  summary    String
+  sourceUrl  String
+  occurredAt DateTime?
+  status     String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  sentAt     DateTime?
+  rawItemId  String?
+  rawItem    RawItem?  @relation(fields: [rawItemId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([vendorId])
+  @@index([status])
+  @@index([severity, status, sentAt])
+}
+
+model Subscriber {
+  id          String    @id @default(cuid())
+  name        String
+  email       String    @unique
+  active      Boolean   @default(true)
+  onboardedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  subscriptions Subscription[]
+  sendLogs      SendLog[]
+}
+
+model Subscription {
+  id           String     @id @default(cuid())
+  subscriberId String
+  subscriber   Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  vendorId     String
+  vendor       Vendor     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([subscriberId, vendorId])
+  @@index([vendorId])
+}
+
+model SendLog {
+  id           String     @id @default(cuid())
+  subscriberId String
+  subscriber   Subscriber @relation(fields: [subscriberId], references: [id], onDelete: Cascade)
+  kind         String // 'onboarding' | 'digest' | 'alert'
+  periodStart  DateTime?
+  periodEnd    DateTime?
+  eventIds     String     @default("[]") // JSON-encoded array of Event ids
+  sentAt       DateTime   @default(now())
+
+  @@index([subscriberId, kind])
+}
