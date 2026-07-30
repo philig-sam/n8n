@@ -32,9 +32,11 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/prisma ./node_modules/prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 
-# SQLite lives on a volume
+# SQLite lives on a persistent volume mounted at /data by the host platform
+# (Railway volume / Render disk / `docker run -v`). No VOLUME instruction:
+# Railway rejects Dockerfiles that declare one.
 ENV DATABASE_URL="file:/data/app.db"
-VOLUME /data
+RUN mkdir -p /data
 
 EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
