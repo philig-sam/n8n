@@ -50,8 +50,13 @@ ENV DATABASE_URL="file:/data/app.db"
 RUN mkdir -p /data
 
 EXPOSE 3000
-ENV PORT=3000 HOSTNAME=0.0.0.0
+ENV PORT=3000
 
-# Apply migrations and the idempotent seed, then start the persistent server
-# (which boots the in-process scheduler)
-CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && { node prisma/seed.js || echo '[boot] seed skipped (non-fatal)'; } && node server.js"]
+# Boot: migrations, idempotent seed (non-fatal), then the persistent server
+# that starts the in-process scheduler.
+#
+# HOSTNAME is forced at exec time, not via ENV: container platforms (Railway,
+# Docker itself) inject HOSTNAME as the container's own name, which overrides
+# the image ENV. Next's standalone server binds to it and dies with ENOTFOUND.
+# PORT falls back to 3000 but honours whatever the platform injects.
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && { node prisma/seed.js || echo '[boot] seed skipped (non-fatal)'; } && HOSTNAME=0.0.0.0 PORT=\"${PORT:-3000}\" node server.js"]
