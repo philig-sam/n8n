@@ -40,4 +40,4 @@ EXPOSE 3000
 ENV PORT=3000 HOSTNAME=0.0.0.0
 
 # Apply migrations, then start the persistent server (which boots the scheduler)
-CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "node node_modules/prisma/build/index.js migrate deploy && node server.js"]
