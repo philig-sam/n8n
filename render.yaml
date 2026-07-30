@@ -1,0 +1,36 @@
+# Render Blueprint: one-click deployment of the Vendor Licensing Intelligence
+# Service as a single persistent process with a persistent disk for SQLite.
+#
+# In the Render dashboard: New + -> Blueprint -> select this repo and the
+# branch below -> you will be asked once for ADMIN_PASSWORD -> Apply.
+
+services:
+  - type: web
+    name: vendor-licensing-intelligence
+    runtime: docker
+    plan: starter # persistent disks require a paid instance; starter is the smallest
+    region: frankfurt
+    branch: claude/vendor-licensing-intelligence-i3s8vy
+    healthCheckPath: /login
+    autoDeploy: true
+    disk:
+      name: vendor-intel-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        value: file:/data/app.db
+      - key: DRY_RUN
+        value: "true" # no real emails while testing; flip to "false" later
+      - key: SKIP_EMPTY_DIGESTS
+        value: "true"
+      - key: ADMIN_PASSWORD
+        sync: false # entered once in the dashboard when applying the blueprint
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium
+      # Add later in the dashboard when ready:
+      #   ANTHROPIC_API_KEY  - enables AI classification (processItems)
+      #   ANTHROPIC_MODEL    - optional, defaults to claude-sonnet-4-5
+      #   SMTP_HOST / SMTP_PORT / SMTP_USER / SMTP_PASS / SMTP_FROM - real email sending

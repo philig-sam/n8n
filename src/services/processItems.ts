@@ -22,6 +22,13 @@ const THIN_CONTENT_CHARS = 400;
  * needsReview instead of being dropped.
  */
 export async function processItems(): Promise<ProcessResult> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.log(
+      '[processItems] ANTHROPIC_API_KEY is not set - skipping classification. Items stay unprocessed until a key is configured.',
+    );
+    return { processed: 0, eventsCreated: 0, clustered: 0, notMaterial: 0, flaggedForReview: 0 };
+  }
+
   const items = await prisma.rawItem.findMany({
     where: { processed: false },
     include: { vendor: { select: { name: true } } },
